@@ -96,13 +96,27 @@ function senderFor(group, conversation) {
   return "Unknown";
 }
 
+function isSharedContent(group) {
+  return [...group.querySelectorAll("a[href]")].some((link) => {
+    const href = link.getAttribute("href") || "";
+    try {
+      return /^\/(?:reel|reels|p|stories|tv)\//.test(new URL(href, location.origin).pathname);
+    } catch {
+      return false;
+    }
+  });
+}
+
 function extractMessages(surface, surfaceIndex) {
   const conversation = surfaceTitle(surface, surfaceIndex);
   const conversationId = surfaceId(surface, surfaceIndex);
-  const groups = [...surface.querySelectorAll('[role="group"]')].filter(isVisible);
+  const groups = [...surface.querySelectorAll('[role="group"]')].filter((group) => (
+    isVisible(group) && !group.parentElement?.closest('[role="group"]')
+  ));
 
   return groups.flatMap((group) => {
-    const text = cleanText(group.innerText || "");
+    const sharedContent = isSharedContent(group);
+    const text = sharedContent ? "[Shared reel/post]" : cleanText(group.innerText || "");
     if (!text || text.length > 4000) return [];
 
     const sender = senderFor(group, conversation);
@@ -111,12 +125,13 @@ function extractMessages(surface, surfaceIndex) {
 
     return [{
       id: fingerprint,
-      schemaVersion: 2,
+      schemaVersion: 4,
       conversationId,
       conversation,
       sender,
       timestampLabel,
       text,
+      messageType: sharedContent ? "shared_content" : "text",
       surfaceType: location.pathname.startsWith("/direct/") ? "full" : "popup",
       pageUrl: location.href,
       capturedAt: new Date().toISOString()
@@ -126,7 +141,7 @@ function extractMessages(surface, surfaceIndex) {
 
 async function persist(messages, surfaceCount) {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const previousCapture = stored[STORAGE_KEY] || {};
+  const previousCapture = stored[STORAGE_KEY]?.schemaVersion === 4 ? stored[STORAGE_KEY] : {};
   const conversations = { ...(previousCapture.conversations || {}) };
   let lastConversationId = "";
 
@@ -159,7 +174,7 @@ async function persist(messages, surfaceCount) {
 
   await chrome.storage.local.set({
     [STORAGE_KEY]: {
-      schemaVersion: 3,
+      schemaVersion: 4,
       conversations,
       activeConversationId,
       surfaceCount,

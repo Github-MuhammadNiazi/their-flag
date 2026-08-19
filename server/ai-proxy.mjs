@@ -21,14 +21,18 @@ const schema = {
     signals: { type: "array", items: { type: "string" }, maxItems: 6 },
     latestInterpretation: { type: "string" },
     suggestions: {
-      type: "object",
-      additionalProperties: false,
-      required: ["rizz", "calm", "reassure", "sarcasm"],
-      properties: {
-        rizz: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 3 },
-        calm: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 3 },
-        reassure: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 3 },
-        sarcasm: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 3 }
+      type: "array",
+      minItems: 4,
+      maxItems: 4,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["emotion", "response", "rationale"],
+        properties: {
+          emotion: { type: "string" },
+          response: { type: "string" },
+          rationale: { type: "string" }
+        }
       }
     }
   }
@@ -58,9 +62,12 @@ async function analyzeConversation(payload) {
         "The latest message from THEM is the most important signal; use the full transcript only as context.",
         "Distinguish friendliness, teasing, confusion, guardedness, irritation, hostility, vulnerability, and explicit boundaries.",
         "Do not call an exchange warm when the latest message contains an insult, rejection, correction, or boundary.",
-        "Generate new, transcript-specific replies. Do not repeat generic stock phrases.",
-        "Rizz means respectful charm, never pressure or manipulation. If sarcasm is unsafe for the current tone, its suggestions should explicitly recommend a non-sarcastic repair.",
-        "Keep each suggested message natural and under 240 characters."
+        "Generate exactly four new transcript-specific replies for the current situation. Do not use fixed categories or generic stock phrases.",
+        "For each reply, label the emotional intention it is designed to convey, such as accountable, warm, curious, reassuring, playful, direct, or boundary-respecting.",
+        "The four choices should be meaningfully different but all appropriate and safe for the detected tone and relationship progress.",
+        "Respectful charm is allowed, but never pressure or manipulation. Do not suggest sarcasm when it is likely to escalate the situation.",
+        "A transcript entry written as '[Shared reel/post]' is only a neutral sharing event. Never infer tone, attraction, intent, or topic from the shared item's caption or embedded text.",
+        "Keep each suggested message natural and under 240 characters, and each rationale under 120 characters."
       ].join(" "),
       input: `Conversation with @${payload.name}:\n${transcript}`,
       text: {

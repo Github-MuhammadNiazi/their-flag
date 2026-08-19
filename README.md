@@ -8,7 +8,8 @@ A local-first Chrome extension for reading Instagram conversations, detecting th
 - Detects full Direct and home-page floating chat surfaces.
 - Captures one local record per visible message, including sender and displayed timestamp.
 - Loads older visible history when **Read conversation** is selected.
-- Uses an optional local OpenAI proxy for contextual tone detection and fresh replies for impressing, calming, reassuring, or using light sarcasm.
+- Uses the local OpenAI proxy for all tone detection and four situation-specific reply options, each labeled with its intended emotional effect.
+- Treats a shared reel or post as a neutral sharing event; embedded captions are excluded from AI context.
 - Shows analysis and reply suggestions in a Chrome side panel.
 - Never sends Instagram messages automatically. Conversation text is sent to OpenAI only when **Analyze conversation** is selected.
 
@@ -35,7 +36,7 @@ npm run ai
 
 The proxy listens only on `127.0.0.1:43129`. You may set `OPENAI_MODEL` or `THEIR_FLAG_PORT` before starting it; if the port changes, update the extension endpoint too.
 
-Reload the unpacked extension after upgrading to version 0.3.0 because its localhost host permission changed.
+Reload the unpacked extension after upgrading. Version 0.4.0 rebuilds stored conversation history once so previously captured reel captions cannot remain in AI context.
 
 After editing the extension, select **Reload** on its card in `chrome://extensions`, then refresh Instagram.
 
