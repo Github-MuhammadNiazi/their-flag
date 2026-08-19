@@ -6,6 +6,7 @@ const MAX_HISTORY_PASSES = 30;
 
 let scanTimer;
 let lastPageUrl = location.href;
+let historyScanInProgress = false;
 
 function hash(value) {
   let result = 2166136261;
@@ -139,11 +140,12 @@ function extractMessages(surface, surfaceIndex) {
   });
 }
 
-async function persist(messages, surfaceCount) {
+async function persist(messages, surfaceCount, { replaceConversations = false } = {}) {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const previousCapture = stored[STORAGE_KEY]?.schemaVersion === 4 ? stored[STORAGE_KEY] : {};
+  const previousCapture = stored[STORAGE_KEY]?.schemaVersion === 5 ? stored[STORAGE_KEY] : {};
   const conversations = { ...(previousCapture.conversations || {}) };
   let lastConversationId = "";
+  const grouped = new Map();
 
   messages.forEach((originalMessage) => {
     const matchingThread = originalMessage.conversationId.startsWith("profile:")
@@ -153,16 +155,23 @@ async function persist(messages, surfaceCount) {
       ? { ...originalMessage, conversationId: matchingThread.id }
       : originalMessage;
     lastConversationId = message.conversationId;
-    const existing = conversations[message.conversationId] || {
-      id: message.conversationId,
-      name: message.conversation,
+    if (!grouped.has(message.conversationId)) grouped.set(message.conversationId, []);
+    grouped.get(message.conversationId).push(message);
+  });
+
+  grouped.forEach((conversationMessages, conversationId) => {
+    const existing = conversations[conversationId] || {
+      id: conversationId,
+      name: conversationMessages[0].conversation,
       messages: []
     };
-    const byId = new Map(existing.messages.map((item) => [item.id, item]));
-    byId.set(message.id, message);
-    conversations[message.conversationId] = {
+    const byId = new Map(
+      replaceConversations ? [] : existing.messages.map((item) => [item.id, item])
+    );
+    conversationMessages.forEach((message) => byId.set(message.id, message));
+    conversations[conversationId] = {
       ...existing,
-      name: message.conversation,
+      name: conversationMessages[0].conversation,
       messages: [...byId.values()].slice(-MAX_MESSAGES),
       updatedAt: new Date().toISOString()
     };
@@ -174,7 +183,7 @@ async function persist(messages, surfaceCount) {
 
   await chrome.storage.local.set({
     [STORAGE_KEY]: {
-      schemaVersion: 4,
+      schemaVersion: 5,
       conversations,
       activeConversationId,
       surfaceCount,
@@ -204,35 +213,49 @@ async function loadVisibleHistory(surface) {
   const scroller = scrollContainerFor(surface);
   if (!scroller) return extractMessages(surface, 0);
 
-  const captured = new Map();
+  let ordered = [];
   let stablePasses = 0;
   let previousHeight = -1;
+
+  function mergeOlderChunk(current) {
+    if (!current.length) return;
+    const currentIds = new Set(current.map((message) => message.id));
+    ordered = [...current, ...ordered.filter((message) => !currentIds.has(message.id))];
+  }
+
   for (let pass = 0; pass < MAX_HISTORY_PASSES && stablePasses < 2; pass += 1) {
-    extractMessages(surface, 0).forEach((message) => captured.set(message.id, message));
+    mergeOlderChunk(extractMessages(surface, 0));
     const beforeHeight = scroller.scrollHeight;
     scroller.scrollTop = 0;
     await wait(HISTORY_WAIT_MS);
+    mergeOlderChunk(extractMessages(surface, 0));
     const afterHeight = scroller.scrollHeight;
     stablePasses = scroller.scrollTop <= 2 && afterHeight === beforeHeight && afterHeight === previousHeight
       ? stablePasses + 1
       : 0;
     previousHeight = afterHeight;
   }
-  extractMessages(surface, 0).forEach((message) => captured.set(message.id, message));
   scroller.scrollTop = scroller.scrollHeight;
-  return [...captured.values()];
+  return ordered;
 }
 
 async function scan({ loadHistory = false } = {}) {
-  const surfaces = findSurfaces();
-  const messages = loadHistory
-    ? (await Promise.all(surfaces.map(loadVisibleHistory))).flat()
-    : surfaces.flatMap(extractMessages);
-  await persist(messages, surfaces.length);
-  return { surfaceCount: surfaces.length, messageCount: messages.length };
+  if (historyScanInProgress && !loadHistory) return { surfaceCount: 0, messageCount: 0 };
+  if (loadHistory) historyScanInProgress = true;
+  try {
+    const surfaces = findSurfaces();
+    const messages = loadHistory
+      ? (await Promise.all(surfaces.map(loadVisibleHistory))).flat()
+      : surfaces.flatMap(extractMessages);
+    await persist(messages, surfaces.length, { replaceConversations: loadHistory });
+    return { surfaceCount: surfaces.length, messageCount: messages.length };
+  } finally {
+    if (loadHistory) historyScanInProgress = false;
+  }
 }
 
 function scheduleScan() {
+  if (historyScanInProgress) return;
   clearTimeout(scanTimer);
   scanTimer = setTimeout(() => scan().catch(console.error), SCAN_DELAY_MS);
 }

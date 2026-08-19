@@ -44,8 +44,9 @@ function outputText(response) {
 }
 
 async function analyzeConversation(payload) {
+  const latestIncomingIndex = payload.messages.findLastIndex((message) => message.sender !== "You");
   const transcript = payload.messages.map((message, index) => (
-    `${index + 1}. ${message.sender === "You" ? "ME" : "THEM"}: ${message.text}`
+    `${index + 1}. ${message.timestampLabel ? `[${message.timestampLabel}] ` : ""}${message.sender === "You" ? "ME" : "THEM"}${index === latestIncomingIndex ? " [LATEST MESSAGE FROM THEM]" : ""}: ${message.text}`
   )).join("\n");
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -59,7 +60,9 @@ async function analyzeConversation(payload) {
       store: false,
       instructions: [
         "Analyze an Instagram DM conversation for a reply assistant.",
+        "The transcript is strictly ordered from OLDEST to NEWEST. Never reinterpret an earlier line as the latest message.",
         "The latest message from THEM is the most important signal; use the full transcript only as context.",
+        "Anchor every suggested reply to the line explicitly marked [LATEST MESSAGE FROM THEM]. Do not answer an older topic unless that latest line refers back to it.",
         "Distinguish friendliness, teasing, confusion, guardedness, irritation, hostility, vulnerability, and explicit boundaries.",
         "Do not call an exchange warm when the latest message contains an insult, rejection, correction, or boundary.",
         "Generate exactly four new transcript-specific replies for the current situation. Do not use fixed categories or generic stock phrases.",
@@ -69,7 +72,7 @@ async function analyzeConversation(payload) {
         "A transcript entry written as '[Shared reel/post]' is only a neutral sharing event. Never infer tone, attraction, intent, or topic from the shared item's caption or embedded text.",
         "Keep each suggested message natural and under 240 characters, and each rationale under 120 characters."
       ].join(" "),
-      input: `Conversation with @${payload.name}:\n${transcript}`,
+      input: `Conversation with @${payload.name}. Transcript order: OLDEST TO NEWEST.\n${transcript}`,
       text: {
         format: {
           type: "json_schema",

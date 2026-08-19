@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Their Flag",
   "description": "A local-first Instagram conversation tone reader and reply assistant.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "permissions": ["storage", "sidePanel"],
   "host_permissions": ["https://www.instagram.com/*", "http://127.0.0.1:43129/*"],
   "background": {

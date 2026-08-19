@@ -36,7 +36,7 @@ npm run ai
 
 The proxy listens only on `127.0.0.1:43129`. You may set `OPENAI_MODEL` or `THEIR_FLAG_PORT` before starting it; if the port changes, update the extension endpoint too.
 
-Reload the unpacked extension after upgrading. Version 0.4.0 rebuilds stored conversation history once so previously captured reel captions cannot remain in AI context.
+Reload the unpacked extension after upgrading. Version 0.4.1 rebuilds stored conversation history once so messages are guaranteed to be supplied to AI from oldest to newest.
 
 After editing the extension, select **Reload** on its card in `chrome://extensions`, then refresh Instagram.
 
