@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Their Flag</title>
+    <link rel="stylesheet" href="sidepanel.css">
+  </head>
+  <body>
+    <header>
+      <p class="eyebrow">INSTAGRAM DM PROTOTYPE</p>
+      <h1>Their Flag</h1>
+      <p class="subtitle">Local capture diagnostics</p>
+    </header>
+
+    <main>
+      <section class="stats" aria-label="Capture status">
+        <div><strong id="surface-count">0</strong><span>chat surfaces</span></div>
+        <div><strong id="message-count">0</strong><span>text items</span></div>
+      </section>
+
+      <section class="card">
+        <div class="card-heading">
+          <h2>Recent capture</h2>
+          <button id="scan-button" type="button">Scan now</button>
+        </div>
+        <p id="empty-state" class="muted">Open an Instagram conversation to begin.</p>
+        <ol id="message-list"></ol>
+      </section>
+
+      <section class="card">
+        <h2>Prototype boundaries</h2>
+        <p class="muted">Text stays in Chrome's local extension storage. Nothing is sent or analyzed yet.</p>
+        <button id="clear-button" class="danger" type="button">Clear local capture</button>
+      </section>
+    </main>
+
+    <footer id="last-scan">Not scanned yet</footer>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>
+

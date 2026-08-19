@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Their Flag",
+  "description": "A local-first prototype that captures visible Instagram DM text for later analysis.",
+  "version": "0.1.0",
+  "permissions": ["storage", "sidePanel"],
+  "host_permissions": ["https://www.instagram.com/*"],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Open Their Flag"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
+
