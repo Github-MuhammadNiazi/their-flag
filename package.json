@@ -1,0 +1,8 @@
+{
+  "name": "their-flag",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ai": "node server/ai-proxy.mjs"
+  }
+}

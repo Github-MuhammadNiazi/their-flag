@@ -1,42 +1,31 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Their Flag</title>
-    <link rel="stylesheet" href="sidepanel.css">
-  </head>
-  <body>
-    <header>
-      <p class="eyebrow">INSTAGRAM DM PROTOTYPE</p>
-      <h1>Their Flag</h1>
-      <p class="subtitle">Local capture diagnostics</p>
-    </header>
-
-    <main>
-      <section class="stats" aria-label="Capture status">
-        <div><strong id="surface-count">0</strong><span>chat surfaces</span></div>
-        <div><strong id="message-count">0</strong><span>text items</span></div>
-      </section>
-
-      <section class="card">
-        <div class="card-heading">
-          <h2>Recent capture</h2>
-          <button id="scan-button" type="button">Scan now</button>
-        </div>
-        <p id="empty-state" class="muted">Open an Instagram conversation to begin.</p>
-        <ol id="message-list"></ol>
-      </section>
-
-      <section class="card">
-        <h2>Prototype boundaries</h2>
-        <p class="muted">Text stays in Chrome's local extension storage. Nothing is sent or analyzed yet.</p>
-        <button id="clear-button" class="danger" type="button">Clear local capture</button>
-      </section>
-    </main>
-
-    <footer id="last-scan">Not scanned yet</footer>
-    <script src="sidepanel.js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Their Flag</title><link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header><p class="eyebrow">CONVERSATION COPILOT</p><h1>Their Flag</h1><p class="subtitle">Read the vibe. Choose your move.</p></header>
+  <main>
+    <section class="hero card">
+      <div><p class="label">Current conversation</p><h2 id="conversation-name">No chat open</h2><p id="history-status" class="muted">Open a conversation, then scan its history.</p></div>
+      <button id="scan-button" type="button">Analyze conversation</button>
+    </section>
+    <section id="analysis-card" class="card" hidden>
+      <div class="section-heading"><div><p class="label">Detected tone</p><h2 id="tone-name">Neutral</h2></div><span id="tone-score" class="pill">Early read</span></div>
+      <p id="tone-summary" class="analysis-copy"></p><div class="meter"><span id="tone-meter"></span></div><p id="tone-signals" class="muted"></p>
+    </section>
+    <section id="suggestions-card" class="card" hidden>
+      <div class="section-heading"><div><p class="label">Reply studio</p><h2>How do you want to respond?</h2></div></div>
+      <div id="intent-tabs" class="intent-tabs" role="tablist">
+        <button class="intent active" data-intent="rizz" type="button">Impress</button><button class="intent" data-intent="calm" type="button">Calm</button><button class="intent" data-intent="reassure" type="button">Reassure</button><button class="intent" data-intent="sarcasm" type="button">Sarcasm</button>
+      </div>
+      <div id="suggestion-list" class="suggestions"></div>
+      <p class="privacy-note">This conversation is sent through your local proxy to OpenAI for analysis. Chats are isolated and never combined. Review before sending.</p>
+    </section>
+    <details class="card context-card"><summary><span>Conversation context</span><strong id="message-count">0 messages</strong></summary><ol id="message-list"></ol></details>
+    <button id="clear-button" class="quiet" type="button">Clear local conversation data</button>
+  </main>
+  <footer id="last-scan">Not scanned yet</footer><script src="sidepanel.js"></script>
+</body>
 </html>
-

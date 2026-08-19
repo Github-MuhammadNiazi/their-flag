@@ -1,6 +1,8 @@
 const STORAGE_KEY = "theirFlagCapture";
 const MAX_MESSAGES = 2000;
 const SCAN_DELAY_MS = 400;
+const HISTORY_WAIT_MS = 650;
+const MAX_HISTORY_PASSES = 30;
 
 let scanTimer;
 let lastPageUrl = location.href;
@@ -28,48 +30,94 @@ function findSurfaces() {
   const candidates = new Set();
 
   if (location.pathname.startsWith("/direct/")) {
-    document.querySelectorAll("main").forEach((node) => candidates.add(node));
-  }
+    document.querySelectorAll("main").forEach((node) => {
+      if (node.querySelector('[role="textbox"], textarea')) candidates.add(node);
+    });
+  } else {
+    document.querySelectorAll('[role="textbox"], textarea').forEach((editor) => {
+      if (!isVisible(editor)) return;
 
-  document.querySelectorAll('[role="dialog"]').forEach((node) => {
-    const text = cleanText(node.textContent || "");
-    const hasMessagingUi = node.querySelector('textarea, [contenteditable="true"]');
-    if (text && hasMessagingUi) candidates.add(node);
-  });
+      // Instagram's home-page chat is not a dialog. The conversation is wrapped
+      // by a labelled container (the label is normally the participant's name).
+      let labelledContainer = editor.closest("[aria-label]");
+      while (labelledContainer && !labelledContainer.querySelector('[role="group"]')) {
+        labelledContainer = labelledContainer.parentElement?.closest("[aria-label]");
+      }
+
+      if (labelledContainer) candidates.add(labelledContainer);
+    });
+  }
 
   return [...candidates].filter(isVisible);
 }
 
 function surfaceTitle(surface, index) {
-  const heading = surface.querySelector('h1, h2, h3, [role="heading"]');
-  const title = cleanText(heading?.textContent || "");
+  const profileLink = surface.querySelector('a[aria-label^="Open the profile page of "]');
+  const username = profileLink?.getAttribute("aria-label")?.replace("Open the profile page of ", "");
+  if (username) return username;
+
+  const title = cleanText(surface.getAttribute("aria-label") || "");
   return title || (location.pathname.startsWith("/direct/") ? "Instagram Direct" : `Floating chat ${index + 1}`);
 }
 
-function extractLines(surface, surfaceIndex) {
-  const title = surfaceTitle(surface, surfaceIndex);
-  const leaves = [...surface.querySelectorAll("span, div")].filter((node) => {
-    if (node.children.length > 0 || !isVisible(node)) return false;
-    const text = cleanText(node.textContent || "");
-    return text.length >= 1 && text.length <= 2000;
-  });
+function surfaceId(surface, surfaceIndex) {
+  const threadId = location.pathname.match(/^\/direct\/t\/([^/]+)/)?.[1];
+  if (threadId) return `thread:${threadId}`;
+  return `profile:${surfaceTitle(surface, surfaceIndex).toLowerCase()}`;
+}
 
-  const seen = new Set();
-  return leaves.flatMap((node) => {
-    const text = cleanText(node.textContent || "");
-    if (!text || seen.has(text)) return [];
-    seen.add(text);
+function timestampFor(group, text) {
+  let container = group.parentElement;
+  for (let depth = 0; container && depth < 5; depth += 1, container = container.parentElement) {
+    if (container.querySelectorAll('[role="group"]').length !== 1) continue;
+    const containerText = cleanText(container.innerText || "");
+    if (containerText === text) continue;
+    const timestamp = containerText.match(/(?:Today|Yesterday)?\s*\d{1,2}:\d{2}\s*[AP]M/i)?.[0];
+    if (timestamp) return cleanText(timestamp);
+  }
+  return "";
+}
 
-    const senderHint = cleanText(
-      node.closest('[aria-label]')?.getAttribute("aria-label") || ""
-    ).slice(0, 160);
-    const fingerprint = hash(`${title}|${senderHint}|${text}`);
+function senderFor(group, conversation) {
+  const profileLink = group.querySelector('a[aria-label^="Open the profile page of "]');
+  if (profileLink) {
+    return profileLink.getAttribute("aria-label").replace("Open the profile page of ", "");
+  }
+
+  const bubble = group.querySelector('[role="presentation"]');
+  if (bubble) {
+    const groupRect = group.getBoundingClientRect();
+    const bubbleRect = bubble.getBoundingClientRect();
+    return bubbleRect.left + bubbleRect.width / 2 > groupRect.left + groupRect.width / 2
+      ? "You"
+      : conversation;
+  }
+
+  return "Unknown";
+}
+
+function extractMessages(surface, surfaceIndex) {
+  const conversation = surfaceTitle(surface, surfaceIndex);
+  const conversationId = surfaceId(surface, surfaceIndex);
+  const groups = [...surface.querySelectorAll('[role="group"]')].filter(isVisible);
+
+  return groups.flatMap((group) => {
+    const text = cleanText(group.innerText || "");
+    if (!text || text.length > 4000) return [];
+
+    const sender = senderFor(group, conversation);
+    const timestampLabel = timestampFor(group, text);
+    const fingerprint = hash(`${conversation}|${sender}|${timestampLabel}|${text}`);
 
     return [{
       id: fingerprint,
-      conversation: title,
+      schemaVersion: 2,
+      conversationId,
+      conversation,
+      sender,
+      timestampLabel,
       text,
-      senderHint,
+      surfaceType: location.pathname.startsWith("/direct/") ? "full" : "popup",
       pageUrl: location.href,
       capturedAt: new Date().toISOString()
     }];
@@ -78,38 +126,95 @@ function extractLines(surface, surfaceIndex) {
 
 async function persist(messages, surfaceCount) {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const previous = stored[STORAGE_KEY]?.messages || [];
-  const byId = new Map(previous.map((message) => [message.id, message]));
-  messages.forEach((message) => byId.set(message.id, message));
+  const previousCapture = stored[STORAGE_KEY] || {};
+  const conversations = { ...(previousCapture.conversations || {}) };
+  let lastConversationId = "";
+
+  messages.forEach((originalMessage) => {
+    const matchingThread = originalMessage.conversationId.startsWith("profile:")
+      ? Object.values(conversations).find((item) => item.name === originalMessage.conversation && item.id.startsWith("thread:"))
+      : null;
+    const message = matchingThread
+      ? { ...originalMessage, conversationId: matchingThread.id }
+      : originalMessage;
+    lastConversationId = message.conversationId;
+    const existing = conversations[message.conversationId] || {
+      id: message.conversationId,
+      name: message.conversation,
+      messages: []
+    };
+    const byId = new Map(existing.messages.map((item) => [item.id, item]));
+    byId.set(message.id, message);
+    conversations[message.conversationId] = {
+      ...existing,
+      name: message.conversation,
+      messages: [...byId.values()].slice(-MAX_MESSAGES),
+      updatedAt: new Date().toISOString()
+    };
+  });
+
+  const activeConversationId = lastConversationId
+    || previousCapture.activeConversationId
+    || "";
 
   await chrome.storage.local.set({
     [STORAGE_KEY]: {
-      messages: [...byId.values()].slice(-MAX_MESSAGES),
+      schemaVersion: 3,
+      conversations,
+      activeConversationId,
       surfaceCount,
       lastScanAt: new Date().toISOString(),
       pageUrl: location.href
     }
   });
 
-  renderStatus(surfaceCount, byId.size);
 }
 
-function renderStatus(surfaceCount, messageCount) {
-  let status = document.querySelector("#their-flag-status");
-  if (!status) {
-    status = document.createElement("div");
-    status.id = "their-flag-status";
-    document.documentElement.append(status);
+function scrollContainerFor(surface) {
+  const group = surface.querySelector('[role="group"]');
+  let node = group?.parentElement;
+  while (node && node !== surface.parentElement) {
+    const style = getComputedStyle(node);
+    if (node.scrollHeight > node.clientHeight + 20 && /(auto|scroll)/.test(style.overflowY)) return node;
+    node = node.parentElement;
   }
-  status.textContent = surfaceCount
-    ? `Their Flag: ${surfaceCount} chat surface${surfaceCount === 1 ? "" : "s"}, ${messageCount} text items`
-    : "Their Flag: waiting for a chat";
+  return null;
 }
 
-async function scan() {
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function loadVisibleHistory(surface) {
+  const scroller = scrollContainerFor(surface);
+  if (!scroller) return extractMessages(surface, 0);
+
+  const captured = new Map();
+  let stablePasses = 0;
+  let previousHeight = -1;
+  for (let pass = 0; pass < MAX_HISTORY_PASSES && stablePasses < 2; pass += 1) {
+    extractMessages(surface, 0).forEach((message) => captured.set(message.id, message));
+    const beforeHeight = scroller.scrollHeight;
+    scroller.scrollTop = 0;
+    await wait(HISTORY_WAIT_MS);
+    const afterHeight = scroller.scrollHeight;
+    stablePasses = scroller.scrollTop <= 2 && afterHeight === beforeHeight && afterHeight === previousHeight
+      ? stablePasses + 1
+      : 0;
+    previousHeight = afterHeight;
+  }
+  extractMessages(surface, 0).forEach((message) => captured.set(message.id, message));
+  scroller.scrollTop = scroller.scrollHeight;
+  return [...captured.values()];
+}
+
+async function scan({ loadHistory = false } = {}) {
   const surfaces = findSurfaces();
-  const messages = surfaces.flatMap(extractLines);
+  const messages = loadHistory
+    ? (await Promise.all(surfaces.map(loadVisibleHistory))).flat()
+    : surfaces.flatMap(extractMessages);
   await persist(messages, surfaces.length);
+  return { surfaceCount: surfaces.length, messageCount: messages.length };
 }
 
 function scheduleScan() {
@@ -124,11 +229,11 @@ new MutationObserver(() => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "THEIR_FLAG_SCAN") return false;
-  scan().then(() => sendResponse({ ok: true })).catch((error) => {
+  scan({ loadHistory: Boolean(message.loadHistory) }).then((result) => sendResponse({ ok: true, ...result })).catch((error) => {
     sendResponse({ ok: false, error: error.message });
   });
   return true;
 });
 
+document.querySelector("#their-flag-status")?.remove();
 scheduleScan();
-

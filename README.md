@@ -1,14 +1,16 @@
 # Their Flag
 
-An early, local-first Chrome extension prototype for detecting Instagram messaging surfaces and capturing visible text. It works across `https://www.instagram.com/*`, including the full Direct interface and floating chat dialogs.
+A local-first Chrome extension for reading Instagram conversations, detecting their current tone, and drafting responses for different intentions. It works across the full Direct interface and home-page floating chats.
 
 ## Prototype behavior
 
 - Watches Instagram's dynamic page for chat UI changes.
-- Detects full Direct and floating dialog surfaces.
-- Captures visible text items and deduplicates them locally.
-- Shows capture diagnostics in a Chrome side panel.
-- Does not send messages, call an AI service, or upload captured data.
+- Detects full Direct and home-page floating chat surfaces.
+- Captures one local record per visible message, including sender and displayed timestamp.
+- Loads older visible history when **Read conversation** is selected.
+- Uses an optional local OpenAI proxy for contextual tone detection and fresh replies for impressing, calming, reassuring, or using light sarcasm.
+- Shows analysis and reply suggestions in a Chrome side panel.
+- Never sends Instagram messages automatically. Conversation text is sent to OpenAI only when **Analyze conversation** is selected.
 
 Instagram's DOM changes frequently. The current extraction is deliberately heuristic and intended for local prototype testing, not production use.
 
@@ -22,15 +24,28 @@ Instagram's DOM changes frequently. The current extraction is deliberately heuri
 6. Open a full Direct conversation or a floating chat.
 7. Select the **Their Flag** toolbar icon to open the side panel.
 
+## Start AI analysis
+
+Keep the API key outside the extension. In PowerShell, from this repository:
+
+```powershell
+$env:OPENAI_API_KEY = "your-project-api-key"
+npm run ai
+```
+
+The proxy listens only on `127.0.0.1:43129`. You may set `OPENAI_MODEL` or `THEIR_FLAG_PORT` before starting it; if the port changes, update the extension endpoint too.
+
+Reload the unpacked extension after upgrading to version 0.3.0 because its localhost host permission changed.
+
 After editing the extension, select **Reload** on its card in `chrome://extensions`, then refresh Instagram.
 
 ## Privacy
 
-Captured text is stored only in `chrome.storage.local` for this extension profile. Use **Clear local capture** in the side panel to erase it.
+Captured text is stored in `chrome.storage.local`, partitioned by Instagram thread ID. Popup chats are matched back to a known thread by username when possible. Use **Clear local conversation data** in the side panel to erase it.
 
 ## Current limitations
 
 - Instagram does not provide stable DOM selectors for this use case.
-- Sender and timestamp attribution is not yet reliable.
+- Sender attribution is inferred from Instagram's message alignment and profile markers.
 - Media, reactions, voice notes, and deleted messages are not captured.
 - Analysis and historical scrolling are not implemented yet.

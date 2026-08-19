@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Their Flag",
-  "description": "A local-first prototype that captures visible Instagram DM text for later analysis.",
-  "version": "0.1.0",
+  "description": "A local-first Instagram conversation tone reader and reply assistant.",
+  "version": "0.3.0",
   "permissions": ["storage", "sidePanel"],
-  "host_permissions": ["https://www.instagram.com/*"],
+  "host_permissions": ["https://www.instagram.com/*", "http://127.0.0.1:43129/*"],
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
@@ -24,4 +24,3 @@
     }
   ]
 }
-
